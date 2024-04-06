@@ -26,31 +26,14 @@ type Client struct {
 }
 
 type Report struct {
-    ID          int     `json:"id"`
-    TEAM_ID     []int   `json:"team_id"`
-    CLIENT_ID   int     `json:"client_id"`
-    DATE        string  `json:"date"`
-    ACTIVITIES  []string  `json:"activities"`
-    PENDENCIES  []string  `json:"pendencies"`
-    OBERVATIONS []string    `json:observations`
-}
-
-type Observations struct {
-    ID              int     `json:"id"`
-    REPORT_ID       int     `json:"report_id"`
-    OBSERVATIONS    []string  `json:"observations"`
-}
-
-type Pendencies struct {
-    ID          int     `json:"id"`
-    REPORT_ID   int     `json:"report_id"`
-    PENDENCIES  []string  `json:"pendencies"`
-}
-
-type Activities struct {
-    ID          int     `json:"id"`
-    REPORT_ID   int     `json:"report_id"`
-    ACTIVITIES  []string  `json:"activities"`
+    ID          int         `json:"id"`
+    CLIENT_ID   int         `json:"client_id"`
+    DATE        string      `json:"date"`
+    CAR_LICENSE string      `json:"car_license"`
+    TEAM        []int       `json:"team"`
+    ACTIVITIES  []string    `json:"activities"`
+    PENDENCIES  []string    `json:"pendencies"`
+    OBERVATIONS []string    `json:"observations"`
 }
 
 // Change database connection properties access
@@ -488,9 +471,6 @@ func getClientByNameQuery(c *gin.Context) {
 func addReport(c *gin.Context) {
 
     var report Report
-    // var activities []Activities
-    // var pendencies []Pendencies
-    // var Observations []Observations
 
     // Add the request json to the variable
     if err := c.BindJSON(&report); err != nil {
@@ -519,6 +499,21 @@ func addReport(c *gin.Context) {
     })
 
     db.Close()
+}
+
+// func getAllReports(c *gin.Context) {
+//
+//     var reports []Report
+//
+//     db := dbConnection()
+//
+//     rows, err := db.Query(`SELECT `, args ...any) 
+//
+//     db.Close() 
+// }
+
+func addReport(c *gin.Context) {
+
 }
 
 func main() {
