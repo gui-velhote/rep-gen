@@ -14,55 +14,55 @@ import (
 // json structs definitions
 
 type User struct {
-    ID      int     `json:"id"` 
-    NAME    string  `json:"name"` 
-    PRIVILEGES string `json:"privileges"`
+	ID         int    `json:"id"`
+	NAME       string `json:"name"`
+	PRIVILEGES string `json:"privileges"`
 }
 
 type Client struct {
-    ID      int     `json:"id"`
-    NAME    string  `json:"name"`
-    ADDRESS string  `json:"address"`
+	ID      int    `json:"id"`
+	NAME    string `json:"name"`
+	ADDRESS string `json:"address"`
 }
 
 type Report struct {
-    ID          int         `json:"id"`
-    CLIENT_ID   int         `json:"client_id"`
-    DATE        string      `json:"date"`
-    CAR_LICENSE string      `json:"car_license"`
-    TEAM        []int       `json:"team"`
-    ACTIVITIES  []string    `json:"activities"`
-    PENDENCIES  []string    `json:"pendencies"`
-    OBERVATIONS []string    `json:"observations"`
+	ID          int      `json:"id"`
+	CLIENT_ID   int      `json:"client_id"`
+	DATE        string   `json:"date"`
+	CAR_LICENSE string   `json:"car_license"`
+	TEAM        []int    `json:"team"`
+	ACTIVITIES  []string `json:"activities"`
+	PENDENCIES  []string `json:"pendencies"`
+	OBERVATIONS []string `json:"observations"`
 }
 
 // Change database connection properties access
 func dbConnection() *sql.DB {
-    var db *sql.DB
+	var db *sql.DB
 
-    // capture connection properties
-    cfg := mysql.Config{
-        User: "golang",
-        Passwd: "2002",
-        Net: "tcp",
-        Addr: "127.0.0.1:3306",
-        DBName: "repgen",
-        AllowNativePasswords: true,
-    }
-    // Get a database handle
-    var err error
-    db, err = sql.Open("mysql", cfg.FormatDSN())
-    if err != nil {
-        log.Fatal(err)
-    }
+	// capture connection properties
+	cfg := mysql.Config{
+		User:                 "golang",
+		Passwd:               "2002",
+		Net:                  "tcp",
+		Addr:                 "127.0.0.1:3306",
+		DBName:               "repgen",
+		AllowNativePasswords: true,
+	}
+	// Get a database handle
+	var err error
+	db, err = sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    pingErr := db.Ping()
-    if pingErr != nil {
-        log.Fatal(pingErr)
-    }
-    fmt.Println("connected!")
+	pingErr := db.Ping()
+	if pingErr != nil {
+		log.Fatal(pingErr)
+	}
+	fmt.Println("connected!")
 
-    return db
+	return db
 }
 
 /*
@@ -70,186 +70,183 @@ func dbConnection() *sql.DB {
  */
 func getAllUsers(c *gin.Context) {
 
-    var users []User
+	var users []User
 
-    data_base := dbConnection()
-    rows, err := data_base.Query(`SELECT * FROM User`)
+	data_base := dbConnection()
+	rows, err := data_base.Query(`SELECT * FROM User`)
 
-    if err != nil {
-        data_base.Close()
-        c.JSON(http.StatusNoContent, nil)
-    }
-    defer rows.Close()
-    
-    for rows.Next() {
-        var user User
+	if err != nil {
+		data_base.Close()
+		c.JSON(http.StatusNoContent, nil)
+	}
+	defer rows.Close()
 
-        err := rows.Scan(&user.ID, &user.NAME, &user.PRIVILEGES)
-        if err != nil {
-            c.JSON(http.StatusNoContent, nil)
-        }
-        users = append(users, user)
-    }
+	for rows.Next() {
+		var user User
 
-    c.JSON(http.StatusOK, users)
+		err := rows.Scan(&user.ID, &user.NAME, &user.PRIVILEGES)
+		if err != nil {
+			c.JSON(http.StatusNoContent, nil)
+		}
+		users = append(users, user)
+	}
 
-    data_base.Close()
+	c.JSON(http.StatusOK, users)
+
+	data_base.Close()
 }
-
 
 /*
  * Function that adds a user on the database
  */
 func addUser(c *gin.Context) {
 
-    var newUser User
-    
-    data_base := dbConnection()
+	var newUser User
 
-    if err := c.BindJSON(&newUser); err != nil {
-        data_base.Close()
-        return
-    }
+	data_base := dbConnection()
 
-    query := `INSERT INTO User (name, privileges) VALUES (?, ?)`
+	if err := c.BindJSON(&newUser); err != nil {
+		data_base.Close()
+		return
+	}
 
-    _, err := data_base.ExecContext(context.Background(), query, newUser.NAME, newUser.PRIVILEGES)
+	query := `INSERT INTO User (name, privileges) VALUES (?, ?)`
 
-    if err != nil {
-        data_base.Close()
-        return
-    }
+	_, err := data_base.ExecContext(context.Background(), query, newUser.NAME, newUser.PRIVILEGES)
 
-    // find a way to not need the insertResult variable
-    // fmt.Println(insertResult)
+	if err != nil {
+		data_base.Close()
+		return
+	}
 
-    // Return success
-    c.JSON(http.StatusOK, gin.H{
-        "status" : "success",
-    })
+	// find a way to not need the insertResult variable
+	// fmt.Println(insertResult)
 
-    data_base.Close()
+	// Return success
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+	})
+
+	data_base.Close()
 }
 
 func getUserById(c *gin.Context) {
 
-    var user User
+	var user User
 
-    // Connect to database
-    db := dbConnection()
+	// Connect to database
+	db := dbConnection()
 
-    // Collect GET method data
-    if err := c.BindJSON(&user); err != nil {
-        return
-    }
+	// Collect GET method data
+	if err := c.BindJSON(&user); err != nil {
+		return
+	}
 
-    // Query database for user
-    
-    err := db.QueryRow(`SELECT * FROM User WHERE id=?`, &user.ID).Scan(&user.ID, &user.NAME, &user.PRIVILEGES)
+	// Query database for user
 
-    if  err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad Request",
-        })
-        return
-    } 
+	err := db.QueryRow(`SELECT * FROM User WHERE id=?`, &user.ID).Scan(&user.ID, &user.NAME, &user.PRIVILEGES)
 
-    // Response
-    c.JSON(http.StatusOK, user)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad Request",
+		})
+		return
+	}
 
-    // Close database connection
-    db.Close()
+	// Response
+	c.JSON(http.StatusOK, user)
+
+	// Close database connection
+	db.Close()
 
 }
 
 func getUserByName(c *gin.Context) {
-    
-    var queryUser User
-    var users []User
 
-    if err := c.BindJSON(&queryUser); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad request",
-        })
-        fmt.Println(err)
-        return
-    }
+	var queryUser User
+	var users []User
 
-    db := dbConnection()
+	if err := c.BindJSON(&queryUser); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad request",
+		})
+		fmt.Println(err)
+		return
+	}
 
-    rows, err := db.Query(`SELECT * FROM User WHERE name=?`, queryUser.NAME)
+	db := dbConnection()
 
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad request",
-        })
-        return
-    }
+	rows, err := db.Query(`SELECT * FROM User WHERE name=?`, queryUser.NAME)
 
-    for rows.Next() {
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad request",
+		})
+		return
+	}
 
-        var tempUser User
+	for rows.Next() {
 
-        if err := rows.Scan(&tempUser.ID, &tempUser.NAME, &tempUser.PRIVILEGES); err != nil {
-            fmt.Println(err)
-            return
-        }
+		var tempUser User
 
-        users = append(users, tempUser)
+		if err := rows.Scan(&tempUser.ID, &tempUser.NAME, &tempUser.PRIVILEGES); err != nil {
+			fmt.Println(err)
+			return
+		}
 
-    }
+		users = append(users, tempUser)
 
-    c.JSON(http.StatusOK, users)
+	}
 
-    db.Close()
+	c.JSON(http.StatusOK, users)
+
+	db.Close()
 }
 
 func getUserByNameQuery(c *gin.Context) {
 
-    var queryUser User
-    var users []User
+	var queryUser User
+	var users []User
 
-    if err := c.BindJSON(&queryUser); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad request",
-        })
-            fmt.Println(err)
-        return
-    }
+	if err := c.BindJSON(&queryUser); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad request",
+		})
+		fmt.Println(err)
+		return
+	}
 
-    db := dbConnection()
+	db := dbConnection()
 
-    userName := "%" + queryUser.NAME + "%"
+	userName := "%" + queryUser.NAME + "%"
 
-    rows, err := db.Query(`SELECT * FROM User WHERE name LIKE ?`, userName)
+	rows, err := db.Query(`SELECT * FROM User WHERE name LIKE ?`, userName)
 
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "No data match",
-        })
-        fmt.Println(err)
-        return
-    }
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "No data match",
+		})
+		fmt.Println(err)
+		return
+	}
 
-    for rows.Next() {
-        var tempUser User
+	for rows.Next() {
+		var tempUser User
 
-        if err := rows.Scan(&tempUser.ID, &tempUser.NAME, &tempUser.PRIVILEGES); err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{
-                "status" : "Internal Server Error",
-            })
-            fmt.Println(err)
-            return
-        }
+		if err := rows.Scan(&tempUser.ID, &tempUser.NAME, &tempUser.PRIVILEGES); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status": "Internal Server Error",
+			})
+			fmt.Println(err)
+			return
+		}
 
+		users = append(users, tempUser)
+	}
 
+	c.JSON(http.StatusOK, users)
 
-        users = append(users, tempUser)
-    }
-
-    c.JSON(http.StatusOK, users)
-
-    db.Close()
+	db.Close()
 
 }
 
@@ -258,247 +255,246 @@ func getUserByNameQuery(c *gin.Context) {
  */
 func addClient(c *gin.Context) {
 
-    var newClient Client
+	var newClient Client
 
-    // Get data from post 
-    if err := c.BindJSON(&newClient); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad data post",
-        }) 
-        return
-    }
+	// Get data from post
+	if err := c.BindJSON(&newClient); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad data post",
+		})
+		return
+	}
 
-    // Connect to database
-    data_base := dbConnection()
+	// Connect to database
+	data_base := dbConnection()
 
-    // prepare statement 
-    prepared_statement, err := data_base.PrepareContext(context.Background(), `INSERT INTO Client (name, address) VALUES(?, ?)`)
+	// prepare statement
+	prepared_statement, err := data_base.PrepareContext(context.Background(), `INSERT INTO Client (name, address) VALUES(?, ?)`)
 
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad data post",
-        })
-        data_base.Close()
-        return
-    }
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad data post",
+		})
+		data_base.Close()
+		return
+	}
 
-    // Execute query
-    insertResult, err := prepared_statement.Exec(newClient.NAME, newClient.ADDRESS)
+	// Execute query
+	insertResult, err := prepared_statement.Exec(newClient.NAME, newClient.ADDRESS)
 
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad data post",
-        }) 
-        data_base.Close()
-        return
-    }
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad data post",
+		})
+		data_base.Close()
+		return
+	}
 
-    // figure out a way to not need this
-    fmt.Println(insertResult)
+	// figure out a way to not need this
+	fmt.Println(insertResult)
 
-    // Return success status
-    c.JSON(http.StatusOK, gin.H{
-        "status" : "success",
-    })
+	// Return success status
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+	})
 
-    data_base.Close()
+	data_base.Close()
 }
 
 func getAllClients(c *gin.Context) {
 
-    var clients []Client
+	var clients []Client
 
-    db := dbConnection()
+	db := dbConnection()
 
-    rows, err := db.Query(`SELECT * FROM Client`)
+	rows, err := db.Query(`SELECT * FROM Client`)
 
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{
-            "status" : "Internal Server Error",
-        })
-        fmt.Println(err)
-        db.Close()
-        return
-    }
-    
-    for rows.Next() {
-        var tempClient Client
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
+		})
+		fmt.Println(err)
+		db.Close()
+		return
+	}
 
-        if err := rows.Scan(&tempClient.ID, &tempClient.NAME, &tempClient.ADDRESS); err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{
-                "status" : "Internal Server Error",
-            })
-            fmt.Println(err)
-            return
-        }
+	for rows.Next() {
+		var tempClient Client
 
-        clients = append(clients, tempClient)
-    }
+		if err := rows.Scan(&tempClient.ID, &tempClient.NAME, &tempClient.ADDRESS); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status": "Internal Server Error",
+			})
+			fmt.Println(err)
+			return
+		}
 
-    c.JSON(http.StatusOK, clients)
+		clients = append(clients, tempClient)
+	}
 
-    db.Close()
+	c.JSON(http.StatusOK, clients)
+
+	db.Close()
 }
 
 func getClientById(c *gin.Context) {
 
-    var queryClient Client
+	var queryClient Client
 
-    // get data from request
-    if err := c.BindJSON(&queryClient); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad request",
-        })
-        return
-    } 
+	// get data from request
+	if err := c.BindJSON(&queryClient); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad request",
+		})
+		return
+	}
 
-    // connect to database
-    db := dbConnection()
+	// connect to database
+	db := dbConnection()
 
-    // Query for client from id
-    err := db.QueryRow(`SELECT * FROM Client WHERE id=?`, queryClient.ID).Scan(&queryClient.ID,&queryClient.NAME, &queryClient.ADDRESS)
+	// Query for client from id
+	err := db.QueryRow(`SELECT * FROM Client WHERE id=?`, queryClient.ID).Scan(&queryClient.ID, &queryClient.NAME, &queryClient.ADDRESS)
 
-    fmt.Println(queryClient)
+	fmt.Println(queryClient)
 
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad request",
-        })
-        fmt.Println(err)
-        db.Close()
-        return
-    }
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad request",
+		})
+		fmt.Println(err)
+		db.Close()
+		return
+	}
 
-    // http the request
-    c.JSON(http.StatusOK, queryClient)
+	// http the request
+	c.JSON(http.StatusOK, queryClient)
 
-    // close database
-    db.Close()
+	// close database
+	db.Close()
 }
 
 func getClientByName(c *gin.Context) {
 
-    var queryClient Client
+	var queryClient Client
 
-    // if elements, err := c.GetRawData(); err != nil {
-    //     
-    // } else {
-    //     for _, element := range elements {
-    //         fmt.Print(string(element))
-    //     }
-    // }
+	// if elements, err := c.GetRawData(); err != nil {
+	//
+	// } else {
+	//     for _, element := range elements {
+	//         fmt.Print(string(element))
+	//     }
+	// }
 
-    // get json from request
-    if err := c.BindJSON(&queryClient); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad request",
-        })
-            fmt.Println(err)
-        return
-    }
+	// get json from request
+	if err := c.BindJSON(&queryClient); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad request",
+		})
+		fmt.Println(err)
+		return
+	}
 
-    // connect to database
-    db := dbConnection()
+	// connect to database
+	db := dbConnection()
 
-    // query for client info
-    err := db.QueryRow(`SELECT * FROM Client WHERE name LIKE ?`, queryClient.NAME).Scan(&queryClient.ID, &queryClient.NAME, &queryClient.ADDRESS)
+	// query for client info
+	err := db.QueryRow(`SELECT * FROM Client WHERE name LIKE ?`, queryClient.NAME).Scan(&queryClient.ID, &queryClient.NAME, &queryClient.ADDRESS)
 
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad request",
-        })
-        fmt.Println(err)
-        db.Close()
-        return
-    }
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad request",
+		})
+		fmt.Println(err)
+		db.Close()
+		return
+	}
 
-    // return http with info 
-    c.JSON(http.StatusOK, queryClient)
+	// return http with info
+	c.JSON(http.StatusOK, queryClient)
 
-    // close database
-    db.Close()
+	// close database
+	db.Close()
 
 }
 
 func getClientByNameQuery(c *gin.Context) {
 
-    var clients []Client
-    var queryClient Client
-    
-    db := dbConnection()
+	var clients []Client
+	var queryClient Client
 
-    if err := c.BindJSON(&queryClient); err != nil {
-        fmt.Println(err)
-        return
-    }
+	db := dbConnection()
 
-    queryClient.NAME = "%" + queryClient.NAME + "%"
+	if err := c.BindJSON(&queryClient); err != nil {
+		fmt.Println(err)
+		return
+	}
 
-    rows, err := db.Query(`SELECT * FROM Client WHERE name LIKE ?`, queryClient.NAME)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad request",
-        })
-        fmt.Println(err)
-        db.Close()
-        return
-    }
+	queryClient.NAME = "%" + queryClient.NAME + "%"
 
-    // cicle through rows to get data
-    for rows.Next() {
-        var tempClient Client
+	rows, err := db.Query(`SELECT * FROM Client WHERE name LIKE ?`, queryClient.NAME)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad request",
+		})
+		fmt.Println(err)
+		db.Close()
+		return
+	}
 
-        if err := rows.Scan(&tempClient.ID, &tempClient.NAME, &tempClient.ADDRESS); err != nil {
+	// cicle through rows to get data
+	for rows.Next() {
+		var tempClient Client
 
+		if err := rows.Scan(&tempClient.ID, &tempClient.NAME, &tempClient.ADDRESS); err != nil {
 
-            c.JSON(http.StatusBadRequest, gin.H{
-                "status" : "No data match",
-            })
-            fmt.Println(err)
-            db.Close()
-            return        
-        }
+			c.JSON(http.StatusBadRequest, gin.H{
+				"status": "No data match",
+			})
+			fmt.Println(err)
+			db.Close()
+			return
+		}
 
-        clients = append(clients, tempClient)
+		clients = append(clients, tempClient)
 
-    }
+	}
 
-    c.JSON(http.StatusOK, clients)
-    
-    db.Close()
+	c.JSON(http.StatusOK, clients)
+
+	db.Close()
 }
 
 func addReport(c *gin.Context) {
 
-    var report Report
+	var report Report
 
-    // Add the request json to the variable
-    if err := c.BindJSON(&report); err != nil {
-        fmt.Println(err)
-        return
-    }
+	// Add the request json to the variable
+	if err := c.BindJSON(&report); err != nil {
+		fmt.Println(err)
+		return
+	}
 
-    fmt.Println(report)
+	fmt.Println(report)
 
-    db := dbConnection() 
-    
-    query := `INSERT INTO Report (team, client_id, date) VALUES (?, ?, ?)` 
+	db := dbConnection()
 
-    _, err := db.ExecContext(context.Background(), query, report.TEAM_ID, report.CLIENT_ID, report.DATE)
+	query := `INSERT INTO Report (team, client_id, date) VALUES (?, ?, ?)`
 
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status" : "Bad request",
-        })
-        fmt.Println(err)
-        return
-    }
+	_, err := db.ExecContext(context.Background(), query, report.TEAM_ID, report.CLIENT_ID, report.DATE)
 
-    c.JSON(http.StatusOK, gin.H{
-        "stauts" : "success",
-    })
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad request",
+		})
+		fmt.Println(err)
+		return
+	}
 
-    db.Close()
+	c.JSON(http.StatusOK, gin.H{
+		"stauts": "success",
+	})
+
+	db.Close()
 }
 
 // func getAllReports(c *gin.Context) {
@@ -507,41 +503,42 @@ func addReport(c *gin.Context) {
 //
 //     db := dbConnection()
 //
-//     rows, err := db.Query(`SELECT `, args ...any) 
+//     rows, err := db.Query(`SELECT `, args ...any)
 //
-//     db.Close() 
+//     db.Close()
 // }
 
 func addReport(c *gin.Context) {
+	var report Report
 
 }
 
 func main() {
-    // Creates the default gin router
-    router := gin.Default()
+	// Creates the default gin router
+	router := gin.Default()
 
-    /* Create endpoints here */
-    /* Example: router.GET("/endpoint", function) */
+	/* Create endpoints here */
+	/* Example: router.GET("/endpoint", function) */
 
-    /* Get endpoints */
+	/* Get endpoints */
 
-    // Users endpoints
-    router.GET("/user/getAll", getAllUsers)
-    router.GET("/user/getById", getUserById)
-    router.GET("/user/getByName", getUserByName)
-    router.GET("/user/getByNameQuery", getUserByNameQuery)
+	// Users endpoints
+	router.GET("/user/getAll", getAllUsers)
+	router.GET("/user/getById", getUserById)
+	router.GET("/user/getByName", getUserByName)
+	router.GET("/user/getByNameQuery", getUserByNameQuery)
 
-    // Clients endpoints
-    router.GET("/client/getAll", getAllClients)
-    router.GET("/client/getByID", getClientById)
-    router.GET("/client/getByName", getClientByName)
-    router.GET("/client/getByNameQuery", getClientByNameQuery)
+	// Clients endpoints
+	router.GET("/client/getAll", getAllClients)
+	router.GET("/client/getByID", getClientById)
+	router.GET("/client/getByName", getClientByName)
+	router.GET("/client/getByNameQuery", getClientByNameQuery)
 
-    // Post endpoints
-    router.POST("/user/new", addUser)
-    router.POST("/client/new", addClient)
-    router.POST("/user/addReport", addReport)
-    
-    // Run the server
-    router.Run("localhost:8080")
+	// Post endpoints
+	router.POST("/user/new", addUser)
+	router.POST("/client/new", addClient)
+	router.POST("/user/addReport", addReport)
+
+	// Run the server
+	router.Run("localhost:8080")
 }
