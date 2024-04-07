@@ -1,544 +1,504 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
+	"github.com/BurntSushi/toml"
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
 )
 
-// json structs definitions
+var config Config
 
-type User struct {
+type Config struct {
+	Database struct {
+		USER                   string `toml:"user"`
+		PASSWORD               string `toml:"password"`
+		NET                    string `toml:"net"`
+		ADDRESS                string `toml:"address"`
+		DATABASE_NAME          string `toml:"database_name"`
+		ALLOW_NATIVE_PASSWORDS bool   `toml:"allow_native_passwords"`
+	}
+}
+
+type Employee struct {
 	ID         int    `json:"id"`
 	NAME       string `json:"name"`
 	PRIVILEGES string `json:"privileges"`
 }
 
 type Client struct {
-	ID      int    `json:"id"`
-	NAME    string `json:"name"`
-	ADDRESS string `json:"address"`
+	ID   int    `json:"id"`
+	NAME string `json:"name"`
 }
 
-type Report struct {
-	ID          int      `json:"id"`
-	CLIENT_ID   int      `json:"client_id"`
-	DATE        string   `json:"date"`
-	CAR_LICENSE string   `json:"car_license"`
-	TEAM        []int    `json:"team"`
-	ACTIVITIES  []string `json:"activities"`
-	PENDENCIES  []string `json:"pendencies"`
-	OBERVATIONS []string `json:"observations"`
+type Building struct {
+	ID        int    `json:"id"`
+	CLIENT_ID int    `json:"client_id"`
+	ADDRESS   string `json:"address"`
+	STATUS    string `json:"status"`
 }
 
-// Change database connection properties access
-func dbConnection() *sql.DB {
-	var db *sql.DB
+type Visit struct {
+	ID   int    `json:"id"`
+	DATE string `json:"date"`
+	CAR  string `json:"car"`
+}
 
-	// capture connection properties
-	cfg := mysql.Config{
-		User:                 "golang",
-		Passwd:               "2002",
-		Net:                  "tcp",
-		Addr:                 "127.0.0.1:3306",
-		DBName:               "repgen",
-		AllowNativePasswords: true,
-	}
-	// Get a database handle
-	var err error
-	db, err = sql.Open("mysql", cfg.FormatDSN())
+func parseDatbaseConfig(FILE_PATH string) Config {
+
+	var config Config
+
+	data, err := os.ReadFile(FILE_PATH)
+
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	pingErr := db.Ping()
-	if pingErr != nil {
+	err = toml.Unmarshal(data, &config)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return config
+}
+
+func databaseConnection() *sql.DB {
+
+	cfg := mysql.Config{
+		User:                 config.Database.USER,
+		Passwd:               config.Database.PASSWORD,
+		Net:                  config.Database.NET,
+		Addr:                 config.Database.ADDRESS,
+		DBName:               config.Database.DATABASE_NAME,
+		AllowNativePasswords: config.Database.ALLOW_NATIVE_PASSWORDS,
+	}
+
+	var db *sql.DB
+	var err error
+
+	db, err = sql.Open("mysql", cfg.FormatDSN())
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if pingErr := db.Ping(); pingErr != nil {
 		log.Fatal(pingErr)
 	}
+
 	fmt.Println("connected!")
 
 	return db
 }
 
-/*
- * Function to get all users data from database
- */
-func getAllUsers(c *gin.Context) {
+func getAllEmployees(context *gin.Context) {
 
-	var users []User
+	var employees []Employee
 
-	data_base := dbConnection()
-	rows, err := data_base.Query(`SELECT * FROM User`)
+	database := databaseConnection()
+
+	rows, err := database.Query(`SELECT * FROM Employee`)
 
 	if err != nil {
-		data_base.Close()
-		c.JSON(http.StatusNoContent, nil)
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
+		})
+		log.Fatal(err)
+		database.Close()
+		return
 	}
-	defer rows.Close()
 
 	for rows.Next() {
-		var user User
-
-		err := rows.Scan(&user.ID, &user.NAME, &user.PRIVILEGES)
-		if err != nil {
-			c.JSON(http.StatusNoContent, nil)
+		var tempEmployee Employee
+		if err := rows.Scan(&tempEmployee.ID, &tempEmployee.NAME, &tempEmployee.PRIVILEGES); err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{
+				"status": "Internal Server Error",
+			})
+			log.Fatal(err)
+			database.Close()
+			return
 		}
-		users = append(users, user)
+
+		employees = append(employees, tempEmployee)
 	}
 
-	c.JSON(http.StatusOK, users)
+	context.JSON(http.StatusOK, employees)
 
-	data_base.Close()
+	database.Close()
+
 }
 
-/*
- * Function that adds a user on the database
- */
-func addUser(c *gin.Context) {
-
-	var newUser User
-
-	data_base := dbConnection()
-
-	if err := c.BindJSON(&newUser); err != nil {
-		data_base.Close()
-		return
+func getEmployeeById(context *gin.Context) {
+	var employee Employee
+	var employeeId struct {
+		ID int `json:"id"`
 	}
 
-	query := `INSERT INTO User (name, privileges) VALUES (?, ?)`
-
-	_, err := data_base.ExecContext(context.Background(), query, newUser.NAME, newUser.PRIVILEGES)
-
-	if err != nil {
-		data_base.Close()
-		return
-	}
-
-	// find a way to not need the insertResult variable
-	// fmt.Println(insertResult)
-
-	// Return success
-	c.JSON(http.StatusOK, gin.H{
-		"status": "success",
-	})
-
-	data_base.Close()
-}
-
-func getUserById(c *gin.Context) {
-
-	var user User
-
-	// Connect to database
-	db := dbConnection()
-
-	// Collect GET method data
-	if err := c.BindJSON(&user); err != nil {
-		return
-	}
-
-	// Query database for user
-
-	err := db.QueryRow(`SELECT * FROM User WHERE id=?`, &user.ID).Scan(&user.ID, &user.NAME, &user.PRIVILEGES)
-
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
+	if err := context.BindJSON(&employeeId); err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{
 			"status": "Bad Request",
 		})
 		return
 	}
 
-	// Response
-	c.JSON(http.StatusOK, user)
+	db := databaseConnection()
 
-	// Close database connection
-	db.Close()
-
-}
-
-func getUserByName(c *gin.Context) {
-
-	var queryUser User
-	var users []User
-
-	if err := c.BindJSON(&queryUser); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "Bad request",
-		})
-		fmt.Println(err)
-		return
-	}
-
-	db := dbConnection()
-
-	rows, err := db.Query(`SELECT * FROM User WHERE name=?`, queryUser.NAME)
+	preparedStatement, err := db.Prepare(`SELECT * FROM Employee WHERE id = ?`)
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "Bad request",
+		context.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad Request",
 		})
+		log.Fatal(err)
+		db.Close()
 		return
 	}
 
-	for rows.Next() {
+	err = preparedStatement.QueryRow(employeeId.ID).Scan(&employee.ID, &employee.NAME, &employee.PRIVILEGES)
 
-		var tempUser User
-
-		if err := rows.Scan(&tempUser.ID, &tempUser.NAME, &tempUser.PRIVILEGES); err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		users = append(users, tempUser)
-
+	if err != nil {
+		return
 	}
 
-	c.JSON(http.StatusOK, users)
+	context.JSON(http.StatusOK, employee)
 
 	db.Close()
 }
 
-func getUserByNameQuery(c *gin.Context) {
+func addEmployee(context *gin.Context) {
+	var employee Employee
 
-	var queryUser User
-	var users []User
-
-	if err := c.BindJSON(&queryUser); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "Bad request",
+	if err := context.BindJSON(&employee); err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad Request",
 		})
-		fmt.Println(err)
+		log.Fatal(err)
 		return
 	}
 
-	db := dbConnection()
+	database := databaseConnection()
 
-	userName := "%" + queryUser.NAME + "%"
-
-	rows, err := db.Query(`SELECT * FROM User WHERE name LIKE ?`, userName)
+	preparedStatement, err := database.Prepare(`INSERT INTO Employee (name, privileges) VALUES (?, ?)`)
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "No data match",
-		})
-		fmt.Println(err)
 		return
 	}
 
-	for rows.Next() {
-		var tempUser User
-
-		if err := rows.Scan(&tempUser.ID, &tempUser.NAME, &tempUser.PRIVILEGES); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"status": "Internal Server Error",
-			})
-			fmt.Println(err)
-			return
-		}
-
-		users = append(users, tempUser)
-	}
-
-	c.JSON(http.StatusOK, users)
-
-	db.Close()
-
-}
-
-/*
- * function to add new clients to database
- */
-func addClient(c *gin.Context) {
-
-	var newClient Client
-
-	// Get data from post
-	if err := c.BindJSON(&newClient); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "Bad data post",
-		})
+	if _, err := preparedStatement.Exec(employee.NAME, employee.PRIVILEGES); err != nil {
 		return
 	}
 
-	// Connect to database
-	data_base := dbConnection()
-
-	// prepare statement
-	prepared_statement, err := data_base.PrepareContext(context.Background(), `INSERT INTO Client (name, address) VALUES(?, ?)`)
-
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "Bad data post",
-		})
-		data_base.Close()
-		return
-	}
-
-	// Execute query
-	insertResult, err := prepared_statement.Exec(newClient.NAME, newClient.ADDRESS)
-
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "Bad data post",
-		})
-		data_base.Close()
-		return
-	}
-
-	// figure out a way to not need this
-	fmt.Println(insertResult)
-
-	// Return success status
-	c.JSON(http.StatusOK, gin.H{
+	context.JSON(http.StatusOK, gin.H{
 		"status": "success",
 	})
 
-	data_base.Close()
+	database.Close()
+
 }
 
-func getAllClients(c *gin.Context) {
+func getEmployeesByName(context *gin.Context) {
+	var employees []Employee
+	var employeeName struct {
+		NAME string `json:"name"`
+	}
 
-	var clients []Client
+	// fix return
+	if err := context.BindJSON(&employeeName); err != nil {
+		return
+	}
 
-	db := dbConnection()
+	employeeName.NAME = "%" + employeeName.NAME + "%"
 
-	rows, err := db.Query(`SELECT * FROM Client`)
+	fmt.Println(employeeName.NAME)
+
+	database := databaseConnection()
+
+	preparedStatement, err := database.Prepare(`SELECT * FROM Employee WHERE name LIKE ?`)
+
+	// fix return
+	if err != nil {
+		return
+	}
+
+	rows, err := preparedStatement.Query(&employeeName.NAME)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
+		return
+	}
+
+	for rows.Next() {
+		var tempEmployee Employee
+		if err := rows.Scan(&tempEmployee); err != nil {
+			return
+		}
+		employees = append(employees, tempEmployee)
+	}
+
+	fmt.Println(employees)
+
+	context.JSON(http.StatusOK, employees)
+
+	database.Close()
+}
+
+func getAllClients(context *gin.Context) {
+	var clients []Client
+
+	db := databaseConnection()
+	preparedStatement, err := db.Prepare(`SELECT * FROM Client`)
+
+	if err != nil {
+		return
+	}
+
+	rows, err := preparedStatement.Query()
+
+	if err != nil {
+		return
+	}
+
+	for rows.Next() {
+		var tempClient Client
+
+		if err := rows.Scan(&tempClient.ID, &tempClient.NAME); err != nil {
+			return
+		}
+
+		clients = append(clients, tempClient)
+	}
+
+	context.JSON(http.StatusOK, clients)
+
+	db.Close()
+}
+
+func getClientByName(context *gin.Context) {
+	var clients []Client
+	var clientName struct {
+		NAME string `json:"name"`
+	}
+
+	if err := context.BindJSON(&clientName); err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad Request",
+		})
+		log.Fatal(err)
+		return
+	}
+
+	database := databaseConnection()
+
+	preparedStatement, err := database.Prepare(`SELECT * FROM Client WHERE name LIKE ?`)
+
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
 			"status": "Internal Server Error",
 		})
-		fmt.Println(err)
-		db.Close()
+		log.Fatal(err)
+		return
+	}
+
+	clientName.NAME = "%" + clientName.NAME + "%"
+
+	rows, err := preparedStatement.Query(&clientName.NAME)
+
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Errror",
+		})
+		log.Fatal(err)
 		return
 	}
 
 	for rows.Next() {
 		var tempClient Client
-
-		if err := rows.Scan(&tempClient.ID, &tempClient.NAME, &tempClient.ADDRESS); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"status": "Internal Server Error",
+		if err := rows.Scan(&tempClient.ID, &tempClient.NAME); err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{
+				"status": "Internal Server Errror",
 			})
-			fmt.Println(err)
+			log.Fatal(err)
 			return
 		}
-
 		clients = append(clients, tempClient)
 	}
 
-	c.JSON(http.StatusOK, clients)
+	context.JSON(http.StatusOK, clients)
 
-	db.Close()
+	database.Close()
 }
 
-func getClientById(c *gin.Context) {
+func getClientById(context *gin.Context) {
+	var client Client
 
-	var queryClient Client
-
-	// get data from request
-	if err := c.BindJSON(&queryClient); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "Bad request",
+	if err := context.BindJSON(&client); err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad Request",
 		})
+		log.Fatal(err)
 		return
 	}
 
-	// connect to database
-	db := dbConnection()
+	database := databaseConnection()
 
-	// Query for client from id
-	err := db.QueryRow(`SELECT * FROM Client WHERE id=?`, queryClient.ID).Scan(&queryClient.ID, &queryClient.NAME, &queryClient.ADDRESS)
-
-	fmt.Println(queryClient)
+	preparedStatement, err := database.Prepare(`SELECT * FROM Client WHERE id = ?`)
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "Bad request",
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
 		})
-		fmt.Println(err)
-		db.Close()
+	}
+
+	err = preparedStatement.QueryRow(&client.ID).Scan(&client.ID, &client.NAME)
+
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
+		})
+		log.Fatal(err)
 		return
 	}
 
-	// http the request
-	c.JSON(http.StatusOK, queryClient)
+	context.JSON(http.StatusOK, client)
 
-	// close database
-	db.Close()
+	database.Close()
 }
 
-func getClientByName(c *gin.Context) {
+func addClient(context *gin.Context) {
+	var client Client
 
-	var queryClient Client
-
-	// if elements, err := c.GetRawData(); err != nil {
-	//
-	// } else {
-	//     for _, element := range elements {
-	//         fmt.Print(string(element))
-	//     }
-	// }
-
-	// get json from request
-	if err := c.BindJSON(&queryClient); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "Bad request",
+	// fix return
+	if err := context.BindJSON(&client); err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad Request",
 		})
+		// log.Fatal(err)
 		fmt.Println(err)
 		return
 	}
 
-	// connect to database
-	db := dbConnection()
+	fmt.Println(client)
 
-	// query for client info
-	err := db.QueryRow(`SELECT * FROM Client WHERE name LIKE ?`, queryClient.NAME).Scan(&queryClient.ID, &queryClient.NAME, &queryClient.ADDRESS)
+	database := databaseConnection()
+
+	preparedStatement, err := database.Prepare(`INSERT INTO Client (name) VALUES (?)`)
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "Bad request",
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
 		})
-		fmt.Println(err)
-		db.Close()
+		log.Fatal(err)
 		return
 	}
 
-	// return http with info
-	c.JSON(http.StatusOK, queryClient)
-
-	// close database
-	db.Close()
-
-}
-
-func getClientByNameQuery(c *gin.Context) {
-
-	var clients []Client
-	var queryClient Client
-
-	db := dbConnection()
-
-	if err := c.BindJSON(&queryClient); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	queryClient.NAME = "%" + queryClient.NAME + "%"
-
-	rows, err := db.Query(`SELECT * FROM Client WHERE name LIKE ?`, queryClient.NAME)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "Bad request",
-		})
-		fmt.Println(err)
-		db.Close()
-		return
-	}
-
-	// cicle through rows to get data
-	for rows.Next() {
-		var tempClient Client
-
-		if err := rows.Scan(&tempClient.ID, &tempClient.NAME, &tempClient.ADDRESS); err != nil {
-
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status": "No data match",
-			})
-			fmt.Println(err)
-			db.Close()
-			return
-		}
-
-		clients = append(clients, tempClient)
-
-	}
-
-	c.JSON(http.StatusOK, clients)
-
-	db.Close()
-}
-
-func addReport(c *gin.Context) {
-
-	var report Report
-
-	// Add the request json to the variable
-	if err := c.BindJSON(&report); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Println(report)
-
-	db := dbConnection()
-
-	query := `INSERT INTO Report (team, client_id, date) VALUES (?, ?, ?)`
-
-	_, err := db.ExecContext(context.Background(), query, report.TEAM_ID, report.CLIENT_ID, report.DATE)
+	_, err = preparedStatement.Exec(&client.NAME)
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "Bad request",
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
 		})
-		fmt.Println(err)
+		log.Fatal(err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"stauts": "success",
+	context.JSON(http.StatusOK, gin.H{
+		"status": "success",
 	})
 
-	db.Close()
+	database.Close()
 }
 
-// func getAllReports(c *gin.Context) {
-//
-//     var reports []Report
-//
-//     db := dbConnection()
-//
-//     rows, err := db.Query(`SELECT `, args ...any)
-//
-//     db.Close()
-// }
+func getAllBuildings(context *gin.Context) {
+	var buildings []Building
 
-func addReport(c *gin.Context) {
-	var report Report
+	database := databaseConnection()
 
+	preparedStatement, err := database.Prepare(`SELECT * FROM Building`)
+
+	if err != nil {
+		return
+	}
+
+	rows, err := preparedStatement.Query()
+
+	if err != nil {
+		return
+	}
+
+	for rows.Next() {
+		var tempBuilding Building
+		if err := rows.Scan(&tempBuilding.ID, &tempBuilding.CLIENT_ID, &tempBuilding.ADDRESS, &tempBuilding.STATUS); err != nil {
+			return
+		}
+
+		buildings = append(buildings, tempBuilding)
+	}
+
+	context.JSON(http.StatusOK, buildings)
+
+	database.Close()
+}
+
+func addBuilding(context *gin.Context) {
+	var building Building
+
+	if err := context.BindJSON(&building); err != nil {
+		return
+	}
+
+	database := databaseConnection()
+
+	preparedStatement, err := database.Prepare(`INSERT INTO Building (client_id, address, status) VALUES (?, ?, ?)`)
+
+	if err != nil {
+		return
+	}
+
+	if _, err := preparedStatement.Exec(&building.CLIENT_ID, &building.ADDRESS, &building.STATUS); err != nil {
+		return
+	}
+
+	fmt.Println(building)
+
+	context.JSON(http.StatusOK, gin.H{
+		"status": "success",
+	})
+
+	database.Close()
 }
 
 func main() {
-	// Creates the default gin router
-	router := gin.Default()
+	config = parseDatbaseConfig("./configs/database.toml")
 
-	/* Create endpoints here */
-	/* Example: router.GET("/endpoint", function) */
+	router := gin.Default()
 
 	/* Get endpoints */
 
-	// Users endpoints
-	router.GET("/user/getAll", getAllUsers)
-	router.GET("/user/getById", getUserById)
-	router.GET("/user/getByName", getUserByName)
-	router.GET("/user/getByNameQuery", getUserByNameQuery)
+	// employees
+	router.GET("/employee/getAll", getAllEmployees)
+	router.GET("/employee/getById", getEmployeeById)
+	router.GET("/employee/getByName", getEmployeesByName)
 
-	// Clients endpoints
+	// clients
 	router.GET("/client/getAll", getAllClients)
-	router.GET("/client/getByID", getClientById)
+	router.GET("/client/getById", getClientById)
 	router.GET("/client/getByName", getClientByName)
-	router.GET("/client/getByNameQuery", getClientByNameQuery)
 
-	// Post endpoints
-	router.POST("/user/new", addUser)
-	router.POST("/client/new", addClient)
-	router.POST("/user/addReport", addReport)
+	// building
+	router.GET("/building/getAll", getAllBuildings)
 
-	// Run the server
+	/* Post endpoints */
+
+	// employees
+	router.POST("/employee/add", addEmployee)
+
+	//clients
+	router.POST("/client/add", addClient)
+
 	router.Run("localhost:8080")
 }
