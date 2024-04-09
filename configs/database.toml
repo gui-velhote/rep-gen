@@ -1,7 +1,1 @@
-[database]
-user = "golang"
-password = "2002"
-net = "tcp"
-address = "127.0.0.1:3306"
-database_name = "repgen"
-allow_native_passwords = true
+
