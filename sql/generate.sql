@@ -1,5 +1,9 @@
 CREATE DATABASE IF NOT EXISTS repgen;
 
+CREATE USER IF NOT EXISTS 'golang'@'localhost' IDENTIFIED BY '2002';
+
+GRANT ALL PRIVILEGES ON repgen.* TO 'golang'@'localhost';
+
 USE repgen;
 
 CREATE TABLE IF NOT EXISTS template (

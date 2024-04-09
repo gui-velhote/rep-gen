@@ -12,6 +12,7 @@ def getAllVisits():
 def reportTest(data:dict):
     r = requests.post("http://127.0.0.1:8080/report/test", json.dumps(data))
     print(r.text)
+    print(r.status_code)
 
 def main():
     # addVisit({"date" : "2024-04-08", "car" : "SEO3J42"})
@@ -21,6 +22,7 @@ def main():
         "date": "2024-04-08",
         "car" : "SEO3J42",
         "client_id": 1,
+        "building_id": 1,
         "team_ids" : [1],
         "activity" : [{"activity_id" : 1, "activity_description" : "Passagem de cabo cat6 no terraco"}],
         "observation" : [{"observation_id": 1, "observation_description" : "Sem observacoes"}],
