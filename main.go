@@ -49,6 +49,26 @@ type Visit struct {
 	CAR  string `json:"car"`
 }
 
+type Report struct {
+	VISIT_ID  int    `json:"id"`
+	DATE      string `json:"date"`
+	CAR       string `json:"car"`
+	CLIENT_ID int    `json:"client_id"`
+	TEAM_IDS  []int  `json:"team_ids"`
+	ACTIVITY  []struct {
+		ID          int    `json:"activity_id"`
+		DESCRIPTION string `json:"activity_description"`
+	}
+	OBSERVATION []struct {
+		ID          int    `json:"observation_id"`
+		DESCRIPTION string `json:"observation_description"`
+	}
+	PENDENCY []struct {
+		ID          int    `json:"pendency_id"`
+		DESCRIPTION string `json:"pendency_description"`
+	}
+}
+
 func parseDatbaseConfig(FILE_PATH string) Config {
 
 	var config Config
@@ -306,6 +326,8 @@ func getClientByName(context *gin.Context) {
 
 	clientName.NAME = "%" + clientName.NAME + "%"
 
+	fmt.Println(clientName.NAME)
+
 	rows, err := preparedStatement.Query(&clientName.NAME)
 
 	if err != nil {
@@ -472,6 +494,248 @@ func addBuilding(context *gin.Context) {
 	database.Close()
 }
 
+func getBuildingsByClientId(context *gin.Context) {
+	var buildings []Building
+	var clientId Client
+
+	if err := context.BindJSON(&clientId); err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad Request",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	database := databaseConnection()
+
+	prepredStatement, err := database.Prepare(`SELECT * FROM Building WHERE client_id=?`)
+
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	rows, err := prepredStatement.Query(&clientId.ID)
+
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	for rows.Next() {
+		var tempBuilding Building
+		if err := rows.Scan(&tempBuilding.ID, &tempBuilding.CLIENT_ID, &tempBuilding.ADDRESS, &tempBuilding.STATUS); err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{
+				"status": "Internal Server Error",
+			})
+			fmt.Println(err)
+			return
+		}
+
+		buildings = append(buildings, tempBuilding)
+	}
+
+	context.JSON(http.StatusOK, buildings)
+
+	database.Close()
+}
+
+func getBuildingById(context *gin.Context) {
+	var building Building
+
+	if err := context.BindJSON(&building); err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad Request",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	database := databaseConnection()
+
+	preparedStatement, err := database.Prepare(`SELECT * FROM Building WHERE id=?`)
+
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	if err := preparedStatement.QueryRow(&building.ID).Scan(&building.ID, &building.CLIENT_ID, &building.ADDRESS, &building.STATUS); err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
+		})
+		fmt.Println(err)
+		return
+
+	}
+
+	context.JSON(http.StatusOK, building)
+
+	database.Close()
+}
+
+func getAllVisits(context *gin.Context) {
+	var visits []Visit
+
+	database := databaseConnection()
+
+	preparedStatement, err := database.Prepare(`SELECT * FROM Visit`)
+
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	rows, err := preparedStatement.Query()
+
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	for rows.Next() {
+		var tempVisit Visit
+
+		if err := rows.Scan(&tempVisit.ID, &tempVisit.DATE, &tempVisit.CAR); err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{
+				"status": "Internal Server Error",
+			})
+			fmt.Println(err)
+			return
+		}
+
+		visits = append(visits, tempVisit)
+	}
+
+	context.JSON(http.StatusOK, visits)
+
+	database.Close()
+}
+
+func addVisit(context *gin.Context) {
+	var visit Visit
+
+	if err := context.BindJSON(&visit); err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad Request",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	database := databaseConnection()
+
+	preparedStatement, err := database.Prepare(`INSERT INTO Visit (date, car) VALUES (?, ?)`)
+
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	execResult, err := preparedStatement.Exec(&visit.DATE, &visit.CAR)
+
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "Internal Server Error",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println(execResult)
+
+	context.JSON(http.StatusOK, gin.H{
+		"status": "success",
+	})
+
+	database.Close()
+}
+
+func addReport(context *gin.Context) {
+	var report Report
+	var visit_id int
+
+	if err := context.BindJSON(&report); err != nil {
+		context.JSON(http.StatusBadRequest, gin.H{
+			"status": "Bad Request",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	database := databaseConnection()
+
+	if err := database.QueryRow(`SELECT id FROM Visit ORDER BY id DESC`).Scan(&visit_id); err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "internal server error",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	report.VISIT_ID = visit_id + 1
+
+	fmt.Println(visit_id)
+	fmt.Println(report.VISIT_ID)
+
+	preparedStatement, err := database.Prepare(`INSERT INTO Visit (id, date, car) VALUES (?, ?, ?)`)
+
+	if err != nil {
+		return
+	}
+
+	if _, err := preparedStatement.Exec(&report.DATE, &report.CAR); err != nil {
+		return
+	}
+
+	preparedStatement, err = database.Prepare(`INSERT INTO Makes_visit (visit_id, employee_id) VALUES (?, ?)`)
+
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{
+			"status": "internal server error",
+		})
+		fmt.Println(err)
+		return
+	}
+
+	for i := 0; i < len(report.TEAM_IDS); i++ {
+		_, err = preparedStatement.Exec(&report.TEAM_IDS[i])
+
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{
+				"status": "Internal Server Error",
+			})
+			fmt.Println(err)
+			return
+		}
+	}
+
+	context.JSON(http.StatusOK, gin.H{
+		"status": "success",
+	})
+
+	database.Close()
+
+}
+
 func main() {
 	config = parseDatbaseConfig("./configs/database.toml")
 
@@ -491,6 +755,13 @@ func main() {
 
 	// building
 	router.GET("/building/getAll", getAllBuildings)
+	router.GET("/building/getByClientId", getBuildingsByClientId)
+	router.GET("/building/getById", getBuildingById)
+
+	// visit
+	router.GET("/visit/getAll", getAllVisits)
+	// router.GET("/visit/getById", getVisitById)
+	// router.GET("/visit/getByEmployee", getVisitByEmployee)
 
 	/* Post endpoints */
 
@@ -499,6 +770,16 @@ func main() {
 
 	//clients
 	router.POST("/client/add", addClient)
+
+	// building
+	router.POST("/building/add", addBuilding)
+
+	// visit
+	router.POST("/visit/add", addVisit)
+	router.POST("/visit/report/add", addReport)
+
+	// report
+	router.POST("/report/test", addReport)
 
 	router.Run("localhost:8080")
 }
